@@ -1,0 +1,11 @@
+[package]
+name = "evobridge"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+prost = "0.14.1"
+prost-types = "0.14.1"
+thiserror = "2.0.17"
+tokio = { version = "1.48.0", features = ["macros"] }
+zenoh = "1.7.1"
