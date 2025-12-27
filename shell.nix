@@ -4,6 +4,8 @@ mkShell {
   buildInputs = [
     protobuf
     zenoh
+    clang
+    rustPlatform.bindgenHook
   ];
 }
 
