@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package evosoft.geometry;
+
+//Vector3 and point are the same but I might handle somethings differently in the libraries
+message Point {
+    double x = 1;
+    double y = 2;
+    double z = 3;
+}
+
+message Vector3 {
+    double x = 1;
+    double y = 2;
+    double z = 3;
+}
+
+message Pose2d {
+    double x = 1;
+    double y = 2;
+    double theta = 3; 
+}
+
+message Twist {
+    Vector3 linear = 1;
+    Vector3 angle = 2;
+}
