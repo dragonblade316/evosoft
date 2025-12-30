@@ -18,14 +18,13 @@ async fn main() {
         };
     });
 
-    use embedded_fps::{FPS, StdClock};
-    let std_clock = StdClock::default();
-    let mut fps_counter = embedded_fps::FPS::<60, _>::new(std_clock);
-
-    // request the absolute highest resolution CameraFormat that can be decoded to RGB.
-    let format = CameraFormat::new(Resolution::new(1920, 1080), nokhwa::utils::FrameFormat::GRAY, 60);
+    // use embedded_fps::{FPS, StdClock};
+    // let std_clock = StdClock::default();
+    // let mut fps_counter = embedded_fps::FPS::<60, _>::new(std_clock);
+    //
     
     let requested = RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
+
     // make the camera
     let mut camera = Camera::new(index, requested).unwrap();
     camera.open_stream().unwrap();
@@ -39,6 +38,6 @@ async fn main() {
 
         let _ = publisher.put(img).await.expect("there is no err case");
 
-        println!("{}", fps_counter.tick());
+        // println!("{}", fps_counter.tick());
     }
 }

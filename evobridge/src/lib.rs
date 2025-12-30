@@ -1,4 +1,5 @@
-use std::{collections::HashMap, future::Ready, io::Read, ops::Sub, path::PathBuf};
+use std::{collections::HashMap, fmt::Display, io::Read };
+use derive_name::{Name, Named};
 use thiserror::Error;
 use zenoh::{Resolvable, bytes::ZBytes, handlers::{Callback, DefaultHandler, FifoChannelHandler}, matching::MatchingStatus, query::{Querier, Query, Queryable, QueryableBuilder, Reply}, sample::{Sample, SampleKind}};
 
@@ -99,24 +100,40 @@ impl Remapper {
     }
 }
 
-fn decode<T: prost::Message + Default>(sample: ZBytes) -> Result<T, EvoBridgeError> {
+fn decode<T: prost::Message + Default>(sample: &ZBytes) -> Result<T, EvoBridgeError> {
     let mut buf = Vec::new();
     let mut reader = sample.reader();
-    let _ = reader.read(&mut buf);
+    reader.read_to_end(&mut buf).expect("Reading zbytes failed. I have no idea how this can happen");
     match T::decode(&*buf) {
         Ok(d) => Ok(d),
         Err(e) => Err(EvoBridgeError::DECODING_ERROR)
     }
 }
 
-fn encode<T: prost::Message + Default>(data: T) -> Result<Vec<u8>, EvoBridgeError> {
-    let mut buf = Vec::new();
-    data.encode(&mut buf).unwrap_or(return Err(EvoBridgeError::DECODING_ERROR));
-    return Ok(buf);
+fn encode<T: prost::Message + Default>(data: &T) -> Vec<u8> {
+    data.encode_to_vec()
 }
 
-pub struct SubMessage<T: prost::Message> {
-    payload: T
+#[derive(Debug)]
+pub struct SubMessage {
+    payload: ZBytes,
+    encoding: zenoh::bytes::Encoding
+}
+
+impl Display for SubMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Encoding is: {}. \n ZByte array is {} elements long.", self.encoding().to_string(), self.payload.len()) 
+    } 
+}
+
+impl SubMessage {
+    pub fn payload<T: prost::Message + Default>(&self) -> Result<T, EvoBridgeError> {
+        decode(&self.payload)
+    } 
+
+    pub fn encoding(&self) -> zenoh::bytes::Encoding {
+        self.encoding.clone() 
+    }
 }
 
 pub struct SubscriberBuilder<'a, H> {
@@ -124,28 +141,38 @@ pub struct SubscriberBuilder<'a, H> {
 }
 
 impl <'a> SubscriberBuilder<'a, DefaultHandler> {
-    pub fn with_mut_callback<T: prost::Message + Default, F: FnMut(Result<SubMessage<T> ,EvoBridgeError>) + Send + Sync + 'static>(self, mut callback: F) -> SubscriberBuilder<'a, Callback<Sample>>{
+    pub fn with_mut_callback<F: FnMut(SubMessage) + Send + Sync + 'static>(self, mut callback: F) -> SubscriberBuilder<'a, Callback<Sample>>{
         let builder = self.builder.callback_mut(move |m| {
             //TODO: Clone is probably a performance issue, pls fix
-            let result = match decode(m.payload().clone()) {
-                Ok(p) => Ok(SubMessage {
-                    payload: p
-                }),
-                Err(e) => Err(EvoBridgeError::DECODING_ERROR)
+            // let result = match decode(m.payload().clone()) {
+            //     Ok(p) => Ok(SubMessage {
+            //         payload: p,
+            //         encoding: m.encoding().clone()
+            //     }),
+            //     Err(e) => Err(EvoBridgeError::DECODING_ERROR)
+            // }; TODO: prob gonna have to delete this
+            let result = SubMessage {
+                payload: m.payload().clone(),
+                encoding: m.encoding().clone()
             };
             callback(result);
         });
         SubscriberBuilder::<'a, Callback<Sample>> { builder: builder }
     }
 
-    pub fn with_callback<T: prost::Message + Default, F: Fn(Result<SubMessage<T> ,EvoBridgeError>) + Send + Sync + 'static>(self, callback: F) -> SubscriberBuilder<'a, Callback<Sample>> {
+    pub fn with_callback<F: Fn(SubMessage) + Send + Sync + 'static>(self, callback: F) -> SubscriberBuilder<'a, Callback<Sample>> {
         //TODO: Clone is probably a performance issue, pls fix
         let builder = self.builder.callback(move |m| {
-            let result = match decode(m.payload().clone()) {
-                Ok(p) => Ok(SubMessage {
-                    payload: p
-                }),
-                Err(e) => Err(EvoBridgeError::DECODING_ERROR)
+            // let result = match decode(m.payload().clone()) {
+            //     Ok(p) => Ok(SubMessage {
+            //         payload: p,
+            //         encoding: m.encoding().clone()
+            //     }),
+            //     Err(e) => Err(EvoBridgeError::DECODING_ERROR)
+            // }; //TODO: Test then delete this comment
+            let result = SubMessage {
+                payload: m.payload().clone(),
+                encoding: m.encoding().clone()
             };
             callback(result);
         });
@@ -178,20 +205,27 @@ pub struct Subscriber<H> {
 }
 
 impl Subscriber<FifoChannelHandler<Sample>> {
-    pub async fn recv_async<T: prost::Message + std::default::Default>(&self) -> Result<T, EvoBridgeError> {
+    pub async fn recv_async(&self) -> Result<SubMessage, EvoBridgeError> {
         let sample = match self.subscriber.recv_async().await {
             Ok(p) => p,
             Err(e) => return Err(EvoBridgeError::ALL_SENDERS_DROPPED)
         };
+
+        //TODO: remove these clones
+        Ok(SubMessage {
+            payload: sample.payload().clone(),
+            encoding: sample.encoding().clone()
+        })
+
         
         //TODO: Replace with SubMessage
-        let mut buf = Vec::new();
-        let mut reader = sample.payload().reader();
-        let _ = reader.read(&mut buf);
-        match T::decode(&*buf) {
-            Ok(d) => Ok(d),
-            Err(e) => Err(EvoBridgeError::DECODING_ERROR)
-        }
+        // let mut buf = Vec::new();
+        // let mut reader = sample.payload().reader();
+        // let _ = reader.read(&mut buf);
+        // match T::decode(&*buf) {
+        //     Ok(d) => Ok(d),
+        //     Err(e) => Err(EvoBridgeError::DECODING_ERROR)
+        // } TODO: Delete
 
     }
 }
@@ -255,10 +289,9 @@ pub struct Publisher<'a> {
 }
 
 impl<'a> Publisher<'a> {
-    pub async fn put<T: prost::Message>(&self, message: T) -> Result<(), EvoBridgeError>{
-        let mut buf = Vec::new();
-        let _ = message.encode(&mut buf).unwrap_or(return Err(EvoBridgeError::ENCODING_ERROR));
-        self.publisher.put(buf).await.unwrap();
+    //TODO: remove the result or figure out an error case
+    pub async fn put<T: prost::Message + Default + Name>(&self, message: T) -> Result<(), EvoBridgeError>{
+        self.publisher.put(encode(&message)).encoding(format!("protobuf/{}", T::name())).await.unwrap();
         Ok(())
     } 
     
@@ -276,30 +309,35 @@ pub struct ServiceCall {
 }
 
 impl ServiceCall {
-    pub fn get_payload<T: prost::Message + Default>(&self) -> Result<T, EvoBridgeError> {
+    pub fn payload<T: prost::Message + Default>(&self) -> Result<T, EvoBridgeError> {
         //TODO: Clone here
         let payload = match self.call.payload() {
             Some(k) => k.clone(),
             None => return Err(EvoBridgeError::NO_CONTENT)
         };
 
-        match decode::<T>(payload) {
+        match decode::<T>(&payload) {
             Ok(p) => Ok(p),
             Err(e) => Err(EvoBridgeError::DECODING_ERROR)
         }
     }
 
-    pub fn get_attachment<T: prost::Message + Default>(&self) -> Result<T, EvoBridgeError> {
+    pub fn attachment<T: prost::Message + Default>(&self) -> Result<T, EvoBridgeError> {
         //TODO: clone here
         let payload = match self.call.attachment() {
             Some(k) => k.clone(),
             None => return Err(EvoBridgeError::NO_CONTENT)
         };
-
-        match decode::<T>(payload) {
+        
+        match decode::<T>(&payload) {
             Ok(p) => Ok(p),
             Err(e) => Err(EvoBridgeError::DECODING_ERROR)
         }
+    }
+
+    pub fn encoding(&self) -> Option<zenoh::bytes::Encoding> {
+        //TODO: this clone is probably fine but lets double check later
+        self.call.encoding().cloned()
     }
 
     pub async fn reply<T: prost::Message>(&self, message: T) -> Result<(), EvoBridgeError>{
@@ -370,29 +408,22 @@ pub struct QueryBuilder<'a, H> {
 }
 
 impl <'a> QueryBuilder<'a, DefaultHandler> {
-    pub fn with_mut_callback<T: prost::Message + Default, F: FnMut(Result<SubMessage<T> ,EvoBridgeError>) + Send + Sync + 'static>(self, mut callback: F) -> QueryBuilder<'a, Callback<Reply>>{
+    pub fn with_mut_callback<T: prost::Message + Default, F: FnMut(SubMessage) + Send + Sync + 'static>(self, mut callback: F) -> QueryBuilder<'a, Callback<Reply>>{
         let builder = self.builder.callback_mut(move |m| {
             //TODO: Clone is probably a performance issue, pls fix
-            let result = match decode(m.result().unwrap().payload().clone()) {
-                Ok(p) => Ok(SubMessage {
-                    payload: p
-                }),
-                Err(e) => Err(EvoBridgeError::DECODING_ERROR)
-            };
+            let data = m.result().unwrap();
+            let result = SubMessage { payload: data.payload().clone(), encoding: data.encoding().clone()  };
             callback(result);
         });
         QueryBuilder::<'a, Callback<Reply>> { builder: builder, remapper: self.remapper}
     }
 
-    pub fn with_callback<T: prost::Message + Default, F: Fn(Result<SubMessage<T> ,EvoBridgeError>) + Send + Sync + 'static>(self, callback: F) -> QueryBuilder<'a, Callback<Reply>> {
+    pub fn with_callback<T: prost::Message + Default, F: Fn(SubMessage) + Send + Sync + 'static>(self, callback: F) -> QueryBuilder<'a, Callback<Reply>> {
         //TODO: Clone is probably a performance issue, pls fix
         let builder = self.builder.callback(move |m| {
-            let result = match decode(m.result().unwrap().payload().clone()) {
-                Ok(p) => Ok(SubMessage {
-                    payload: p
-                }),
-                Err(e) => Err(EvoBridgeError::DECODING_ERROR)
-            };
+            let data = m.result().unwrap();
+            let result = SubMessage { payload: data.payload().clone(), encoding: data.encoding().clone()  };
+           
             callback(result);
         });
         QueryBuilder::<'a, Callback<Reply>> { builder: builder, remapper: self.remapper}
@@ -408,14 +439,14 @@ impl <'a> QueryBuilder<'a, DefaultHandler> {
 }
 
 impl<'a, H> QueryBuilder<'a, H> {
-    pub fn payload<T: prost::Message + Default>(self, payload: T) -> Result<QueryBuilder<'a, H>, EvoBridgeError> {
-        let builder = self.builder.payload(encode(payload)?);
-        Ok(QueryBuilder::<'a, H> {builder: builder, remapper: self.remapper})
+    pub fn payload<T: prost::Message + Default + Name>(self, payload: T) -> QueryBuilder<'a, H> {
+        let builder = self.builder.payload(encode(&payload)).encoding(format!("protobuf/{}", payload.name()));
+        QueryBuilder::<'a, H> {builder: builder, remapper: self.remapper}
     }
 
-    pub fn attachment<T: prost::Message + Default>(self, payload: T) -> Result<QueryBuilder<'a, H>, EvoBridgeError> {
-        let builder = self.builder.attachment(encode(payload)?);
-        Ok(QueryBuilder::<'a, H> {builder: builder, remapper: self.remapper})
+    pub fn attachment<T: prost::Message + Default>(self, payload: T) -> QueryBuilder<'a, H> {
+        let builder = self.builder.attachment(encode(&payload));
+        QueryBuilder::<'a, H> {builder: builder, remapper: self.remapper}
     }
 }
 
@@ -463,7 +494,16 @@ impl serviceReply {
         };
         
         //TODO: clone here to maybe be removed
-        Ok(decode(data.payload().clone()).unwrap_or(return Err(EvoBridgeError::DECODING_ERROR)))
+        Ok(decode(&data.payload().clone()).unwrap_or(return Err(EvoBridgeError::DECODING_ERROR)))
+    }
+
+    pub fn encoding(&self) -> Result<zenoh::bytes::Encoding, EvoBridgeError> {
+        let data = match self.reply.result() {
+            Ok(k) => k,
+            Err(e) => return Err(EvoBridgeError::REPLY_ERROR(e.clone()))
+        };
+
+        Ok(data.encoding().clone())
     }
 }
 
