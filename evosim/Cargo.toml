@@ -1,0 +1,12 @@
+[package]
+name = "evosim"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+mujoco-rs = { version = "2.2.0", features = ["viewer"] }
+tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }
+evobridge = {path = "../evobridge/"}
+evotypes-rs = {path = "../evotypes-rs/"}
+serde = { version = "1.0.228", features = ["derive"] }
+toml = "0.9.11"
