@@ -20,6 +20,10 @@ pub mod evosoft {
     pub mod image {
         buf!("/evosoft.image.rs");
     }
+
+    pub mod motors {
+        buf!("/evosoft.motors.rs");
+    }
 }
 impl evosoft::image::Image {
     pub fn from_image(img: ImageBuffer<Rgb<u8>, Vec<u8>>) -> Self {

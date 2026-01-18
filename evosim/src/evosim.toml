@@ -1,4 +1,0 @@
-path = "./"
-[actuators.pos1]
-joint = "joint1"
-actuator = Position

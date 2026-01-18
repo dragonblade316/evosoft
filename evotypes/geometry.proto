@@ -25,3 +25,11 @@ message Twist {
     Vector3 linear = 1;
     Vector3 angle = 2;
 }
+
+message Angle {
+    double radians = 1;
+}
+
+message AngularVelocity {
+    double radians_per_second = 1;
+}

@@ -1,7 +1,9 @@
 use std::{collections::HashMap, fmt::Display, io::Read };
 use derive_name::{Name, Named};
 use thiserror::Error;
-use zenoh::{Resolvable, bytes::ZBytes, handlers::{Callback, DefaultHandler, FifoChannelHandler}, matching::MatchingStatus, query::{Querier, Query, Queryable, QueryableBuilder, Reply}, sample::{Sample, SampleKind}};
+use zenoh::{Resolvable, bytes::ZBytes, handlers::{Callback, DefaultHandler, FifoChannelHandler}, key_expr, matching::MatchingStatus, query::{Querier, Query, Queryable, QueryableBuilder, Reply}, sample::{Sample, SampleKind}};
+
+pub use prost::Message;
 
 #[derive(Error, Debug)]
 pub enum EvoBridgeError {
@@ -117,7 +119,8 @@ fn encode<T: prost::Message + Default>(data: &T) -> Vec<u8> {
 #[derive(Debug)]
 pub struct SubMessage {
     payload: ZBytes,
-    encoding: zenoh::bytes::Encoding
+    encoding: zenoh::bytes::Encoding,
+    key_expr: String,
 }
 
 impl Display for SubMessage {
@@ -133,6 +136,10 @@ impl SubMessage {
 
     pub fn encoding(&self) -> zenoh::bytes::Encoding {
         self.encoding.clone() 
+    }
+
+    pub fn key_expr(&self) -> String {
+        self.key_expr.clone()
     }
 }
 
@@ -153,7 +160,8 @@ impl <'a> SubscriberBuilder<'a, DefaultHandler> {
             // }; TODO: prob gonna have to delete this
             let result = SubMessage {
                 payload: m.payload().clone(),
-                encoding: m.encoding().clone()
+                encoding: m.encoding().clone(),
+                key_expr: m.key_expr().to_string().clone()
             };
             callback(result);
         });
@@ -172,7 +180,8 @@ impl <'a> SubscriberBuilder<'a, DefaultHandler> {
             // }; //TODO: Test then delete this comment
             let result = SubMessage {
                 payload: m.payload().clone(),
-                encoding: m.encoding().clone()
+                encoding: m.encoding().clone(),
+                key_expr: m.key_expr().to_string().clone()
             };
             callback(result);
         });
@@ -214,7 +223,8 @@ impl Subscriber<FifoChannelHandler<Sample>> {
         //TODO: remove these clones
         Ok(SubMessage {
             payload: sample.payload().clone(),
-            encoding: sample.encoding().clone()
+            encoding: sample.encoding().clone(),
+            key_expr: sample.key_expr().to_string().clone()
         })
 
         
@@ -283,7 +293,7 @@ impl MatchingListener<FifoChannelHandler<MatchingStatus>> {
 //     }
 // }
 
-
+#[derive(Debug)]
 pub struct Publisher<'a> {
     publisher: zenoh::pubsub::Publisher<'a>
 }
@@ -412,7 +422,7 @@ impl <'a> QueryBuilder<'a, DefaultHandler> {
         let builder = self.builder.callback_mut(move |m| {
             //TODO: Clone is probably a performance issue, pls fix
             let data = m.result().unwrap();
-            let result = SubMessage { payload: data.payload().clone(), encoding: data.encoding().clone()  };
+            let result = SubMessage { payload: data.payload().clone(), encoding: data.encoding().clone(), key_expr: data.key_expr().to_string().clone()  };
             callback(result);
         });
         QueryBuilder::<'a, Callback<Reply>> { builder: builder, remapper: self.remapper}
@@ -422,7 +432,7 @@ impl <'a> QueryBuilder<'a, DefaultHandler> {
         //TODO: Clone is probably a performance issue, pls fix
         let builder = self.builder.callback(move |m| {
             let data = m.result().unwrap();
-            let result = SubMessage { payload: data.payload().clone(), encoding: data.encoding().clone()  };
+            let result = SubMessage { payload: data.payload().clone(), encoding: data.encoding().clone(), key_expr: data.key_expr().to_string().clone()  };
            
             callback(result);
         });
