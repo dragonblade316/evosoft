@@ -2,6 +2,8 @@
 name = "evomujoco"
 version = "0.1.0"
 edition = "2024"
+description = "A simple wrapper around mujoco-rs to make simulation easier."
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 image = "0.25.9"
