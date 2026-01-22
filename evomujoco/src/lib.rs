@@ -36,6 +36,7 @@ impl Mujoco {
         }
     }
 
+    ///Gets all joints.
     pub fn get_joints(&self) -> HashMap<String, Joint> {
         let ids = self.get_joint_ids();
         let mut map = HashMap::new();
@@ -49,10 +50,12 @@ impl Mujoco {
         map
     }
 
+    ///Gets all existing joint ids.
     pub fn get_joint_ids(&self) -> Vec<i32> {
         (0..self.model.njnt() - 1).collect()
     }
 
+    ///Given a joint id, this function will return the name of a joint.
     pub fn get_joint_name(&self, index: usize) -> String {
         self.model
             .id_to_name(mujoco_rs::mujoco_c::mjtObj::mjOBJ_JOINT, index as i32)
@@ -60,8 +63,10 @@ impl Mujoco {
             .to_string()
     }
 
+    ///Not implemented
     pub fn get_index(&self, name: String) {}
 
+    ///Reterives a joint given a joint index.
     pub fn get_joint(&self, index: usize) -> Joint {
         match self.model.jnt_type().to_vec().get(index).unwrap() {
             mjtJoint::mjJNT_HINGE => Joint::Hinge {
@@ -87,6 +92,7 @@ impl Mujoco {
         }
     }
 
+    ///Gets an actuator
     pub fn get_actuator(&self, name: String) -> Actuator {
         Actuator {
             name: name.clone(),
@@ -97,6 +103,7 @@ impl Mujoco {
         }
     }
 
+    ///Gets a camera
     pub fn get_camera(&self, name: String, resolution: (u32, u32)) -> Camera {
         let (x, y) = resolution;
         Camera {
@@ -108,6 +115,7 @@ impl Mujoco {
         }
     }
 
+    ///The main update function. This will step the simulation and update the viewer.
     pub fn update(&mut self) {
         let mut data = self.data.borrow_mut();
         self.viewer.sync_data(&mut data);
@@ -117,6 +125,7 @@ impl Mujoco {
     }
 }
 
+//Represents a joint. You can create this using Mujoco::get_joint().
 pub enum Joint {
     Hinge {
         index: usize,
@@ -140,6 +149,8 @@ pub enum Joint {
     },
 }
 
+///Simple enum containing the output of a call to get_qpos or get_qvel. The reason this is an enum
+///is because the output of these functions are different based on the kind of joint.
 pub enum JointOutput {
     Scalar(f64),
     Ball {
@@ -158,6 +169,7 @@ pub enum JointOutput {
 }
 
 impl Joint {
+    ///Gets the reletive poition of a joint.
     pub fn get_qpos(&self) -> JointOutput {
         match self {
             Self::Slide {
@@ -246,6 +258,7 @@ impl Joint {
         }
     }
 
+    ///Gets the reletive velocity of a joint
     pub fn get_qvel(&self) -> JointOutput {
         match self {
             Self::Slide {
@@ -335,6 +348,7 @@ impl Joint {
     }
 }
 
+///Simple Actuator struct. Can be spawned with Mujoco::get_actuator.
 pub struct Actuator {
     name: String,
     index: i32,
@@ -343,11 +357,14 @@ pub struct Actuator {
 
 impl Actuator {
     //no idea if this will work but here we are
+    ///This is the tool used to control the input to the actuator by writing to the ctrl array.
+    ///SI units are used for the input.
     pub fn set_ctrl(&self, input: f64) {
         self.control.borrow_mut().ctrl_mut()[self.index as usize] = input;
     }
 }
 
+///Simple camera struct. Can be spawned with Mujoco::get_camera()
 pub struct Camera {
     x: u32,
     y: u32,
@@ -356,6 +373,7 @@ pub struct Camera {
 }
 
 impl Camera {
+    ///Syncs the renderer with the simulation and renders a frame from the camera.
     pub fn render_rgb(&mut self) -> ImageBuffer<Rgb<u8>, Vec<u8>> {
         self.renderer.sync(&mut self.data.borrow_mut());
         let raw = self.renderer.rgb_flat().expect("no camera detected");
@@ -363,6 +381,7 @@ impl Camera {
             .expect("This should not be possible since mujoco should always export something valid")
     }
 
+    ///Syncs the renderer with the simulation and renders a frame from the camera. (may not work)
     pub fn render_depth(&mut self) -> ImageBuffer<Luma<f32>, Vec<f32>> {
         self.renderer.sync(&mut self.data.borrow_mut());
         let raw = self.renderer.depth_flat().expect("no camera detected");
