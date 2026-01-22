@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2024"
 description = "A simple wrapper around mujoco-rs to make simulation easier."
 license = "MIT OR Apache-2.0"
+categories = ["simulation", "science::robotics", "api-bindings"]
+homepage = "https://crates.io/crates/evomujoco"
+repository = "https://github.com/dragonblade316/evosoft"
 
 [dependencies]
 image = "0.25.9"
 mujoco-rs = { version = "2.2.2", features = ["viewer"] }
-ouroboros = "0.18.5"
