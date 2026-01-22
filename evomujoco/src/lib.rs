@@ -3,37 +3,40 @@ use std::{
     time::Duration,
 };
 
-use mujoco_rs::{mujoco_c::mjtJoint, prelude::MjData, viewer::MjViewer};
+use image::{ImageBuffer, ImageReader, Luma, Rgb};
+use mujoco_rs::{
+    mujoco_c::mjtJoint,
+    prelude::MjData,
+    renderer::{self, MjRenderer},
+    viewer::{MjViewer, egui::Image},
+};
 
 pub use mujoco_rs::prelude::MjModel;
 
-pub struct Mujoco<'a> {
-    model: &'a MjModel,
-    data: Rc<RefCell<MjData<&'a MjModel>>>,
-    viewer: MjViewer<&'a MjModel>,
+pub struct Mujoco {
+    model: Rc<MjModel>,
+    data: Rc<RefCell<MjData<Rc<MjModel>>>>,
+    viewer: MjViewer<Rc<MjModel>>,
     timestep: f64,
 }
 
-impl<'a> Mujoco<'a> {
-    pub fn new(model: &'a MjModel) -> Self {
-        let mode = Rc::new(model);
+impl Mujoco {
+    pub fn new(model: MjModel) -> Self {
+        let model = Rc::new(model);
 
-        // let model = MjModel::from_xml_string(&"").unwrap();
-        //
-
-        let data = Rc::new(RefCell::new(model.make_data()));
+        let data = Rc::new(RefCell::new(MjData::new(model.clone())));
         let timestep = model.opt().timestep;
-        let viewer = MjViewer::launch_passive(model, 0).expect("thing");
+        let viewer = MjViewer::launch_passive(model.clone(), 0).expect("thing");
 
         Self {
-            model,
+            model: model.clone(),
             data,
             viewer,
             timestep,
         }
     }
 
-    pub fn get_joints(&'a self) -> HashMap<String, Joint<'a>> {
+    pub fn get_joints(&self) -> HashMap<String, Joint> {
         let ids = self.get_joint_ids();
         let mut map = HashMap::new();
 
@@ -59,28 +62,32 @@ impl<'a> Mujoco<'a> {
 
     pub fn get_index(&self, name: String) {}
 
-    pub fn get_joint(&'a self, index: usize) -> Joint<'a> {
+    pub fn get_joint(&self, index: usize) -> Joint {
         match self.model.jnt_type().to_vec().get(index).unwrap() {
             mjtJoint::mjJNT_HINGE => Joint::Hinge {
                 index,
-                control: self,
+                name: self.get_joint_name(index),
+                control: self.data.clone(),
             },
             mjtJoint::mjJNT_SLIDE => Joint::Slide {
                 index,
-                control: self,
+                name: self.get_joint_name(index),
+                control: self.data.clone(),
             },
             mjtJoint::mjJNT_BALL => Joint::Ball {
                 index,
-                control: self,
+                name: self.get_joint_name(index),
+                control: self.data.clone(),
             },
             mjtJoint::mjJNT_FREE => Joint::Free {
                 index,
-                control: self,
+                name: self.get_joint_name(index),
+                control: self.data.clone(),
             },
         }
     }
 
-    pub fn get_actuator(&'a self, name: String) -> Actuator<'a> {
+    pub fn get_actuator(&self, name: String) -> Actuator {
         Actuator {
             name: name.clone(),
             index: self
@@ -90,9 +97,15 @@ impl<'a> Mujoco<'a> {
         }
     }
 
-    pub fn make_model(path: PathBuf) -> MjModel {
-        let xml = fs::read_to_string(path).expect("invalid path");
-        MjModel::from_xml_string(&xml).expect("invalid xml")
+    pub fn get_camera(&self, name: String, resolution: (u32, u32)) -> Camera {
+        let (x, y) = resolution;
+        Camera {
+            x,
+            y,
+            data: self.data.clone(),
+            renderer: MjRenderer::new(self.model.clone(), x as usize, y as usize, 256)
+                .expect("Prob willwork"),
+        }
     }
 
     pub fn update(&mut self) {
@@ -104,22 +117,26 @@ impl<'a> Mujoco<'a> {
     }
 }
 
-enum Joint<'a> {
+pub enum Joint {
     Hinge {
         index: usize,
-        control: &'a Mujoco<'a>,
+        name: String,
+        control: Rc<RefCell<MjData<Rc<MjModel>>>>,
     },
     Slide {
         index: usize,
-        control: &'a Mujoco<'a>,
+        name: String,
+        control: Rc<RefCell<MjData<Rc<MjModel>>>>,
     },
     Ball {
         index: usize,
-        control: &'a Mujoco<'a>,
+        name: String,
+        control: Rc<RefCell<MjData<Rc<MjModel>>>>,
     },
     Free {
         index: usize,
-        control: &'a Mujoco<'a>,
+        name: String,
+        control: Rc<RefCell<MjData<Rc<MjModel>>>>,
     },
 }
 
@@ -140,45 +157,54 @@ pub enum JointOutput {
     },
 }
 
-impl Joint<'_> {
+impl Joint {
     pub fn get_qpos(&self) -> JointOutput {
         match self {
-            Self::Slide { index, control } => {
-                let con = *control;
-                let data = con.data.borrow();
+            Self::Slide {
+                index,
+                name,
+                control,
+            } => {
+                let con = control.clone();
+                let data = con.borrow();
 
                 let pos = con
-                    .data
                     .borrow()
-                    .joint(&con.get_joint_name(index.clone()))
+                    .joint(name)
                     .expect("hopefully will work")
                     .view(&data)
                     .qpos;
 
                 JointOutput::Scalar(pos.to_vec().get(0).unwrap().clone())
             }
-            Self::Hinge { index, control } => {
-                let con = *control;
-                let data = con.data.borrow();
+            Self::Hinge {
+                index,
+                name,
+                control,
+            } => {
+                let con = control.clone();
+                let data = con.borrow();
 
                 let pos = con
-                    .data
                     .borrow()
-                    .joint(&con.get_joint_name(index.clone()))
+                    .joint(name)
                     .expect("hopefully will work")
                     .view(&data)
                     .qpos;
 
                 JointOutput::Scalar(pos.to_vec().get(0).unwrap().clone())
             }
-            Self::Ball { index, control } => {
-                let con = *control;
-                let data = con.data.borrow();
+            Self::Ball {
+                index,
+                name,
+                control,
+            } => {
+                let con = control.clone();
+                let data = con.borrow();
 
                 let pos = con
-                    .data
                     .borrow()
-                    .joint(&con.get_joint_name(index.clone()))
+                    .joint(name)
                     .expect("hopefully will work")
                     .view(&data)
                     .qpos;
@@ -191,14 +217,17 @@ impl Joint<'_> {
                     rz: pose.get(0).unwrap().clone(),
                 }
             }
-            Self::Free { index, control } => {
-                let con = *control;
-                let data = con.data.borrow();
+            Self::Free {
+                index,
+                name,
+                control,
+            } => {
+                let con = control.clone();
+                let data = con.borrow();
 
                 let pos = con
-                    .data
                     .borrow()
-                    .joint(&con.get_joint_name(index.clone()))
+                    .joint(name)
                     .expect("hopefully will work")
                     .view(&data)
                     .qpos;
@@ -219,42 +248,51 @@ impl Joint<'_> {
 
     pub fn get_qvel(&self) -> JointOutput {
         match self {
-            Self::Slide { index, control } => {
-                let con = *control;
-                let data = con.data.borrow();
+            Self::Slide {
+                index,
+                name,
+                control,
+            } => {
+                let con = control.clone();
+                let data = con.borrow();
 
                 let vel = con
-                    .data
                     .borrow()
-                    .joint(&con.get_joint_name(index.clone()))
+                    .joint(name)
                     .expect("hopefully will work")
                     .view(&data)
                     .qvel;
 
                 JointOutput::Scalar(vel.to_vec().get(0).unwrap().clone())
             }
-            Self::Hinge { index, control } => {
-                let con = *control;
-                let data = con.data.borrow();
+            Self::Hinge {
+                index,
+                name,
+                control,
+            } => {
+                let con = control.clone();
+                let data = con.borrow();
 
                 let vel = con
-                    .data
                     .borrow()
-                    .joint(&con.get_joint_name(index.clone()))
+                    .joint(name)
                     .expect("hopefully will work")
                     .view(&data)
                     .qvel;
 
                 JointOutput::Scalar(vel.to_vec().get(0).unwrap().clone())
             }
-            Self::Ball { index, control } => {
-                let con = *control;
-                let data = con.data.borrow();
+            Self::Ball {
+                index,
+                name,
+                control,
+            } => {
+                let con = control.clone();
+                let data = con.borrow();
 
                 let vel = con
-                    .data
                     .borrow()
-                    .joint(&con.get_joint_name(index.clone()))
+                    .joint(name)
                     .expect("hopefully will work")
                     .view(&data)
                     .qvel;
@@ -267,14 +305,17 @@ impl Joint<'_> {
                     rz: velocity.get(2).unwrap().clone(),
                 }
             }
-            Self::Free { index, control } => {
-                let con = *control;
-                let data = con.data.borrow();
+            Self::Free {
+                index,
+                name,
+                control,
+            } => {
+                let con = control.clone();
+                let data = con.borrow();
 
                 let vel = con
-                    .data
                     .borrow()
-                    .joint(&con.get_joint_name(index.clone()))
+                    .joint(name)
                     .expect("hopefully will work")
                     .view(&data)
                     .qvel;
@@ -294,15 +335,38 @@ impl Joint<'_> {
     }
 }
 
-pub struct Actuator<'a> {
+pub struct Actuator {
     name: String,
     index: i32,
-    control: Rc<RefCell<MjData<&'a MjModel>>>,
+    control: Rc<RefCell<MjData<Rc<MjModel>>>>,
 }
 
-impl Actuator<'_> {
+impl Actuator {
     //no idea if this will work but here we are
     pub fn set_ctrl(&self, input: f64) {
         self.control.borrow_mut().ctrl_mut()[self.index as usize] = input;
+    }
+}
+
+pub struct Camera {
+    x: u32,
+    y: u32,
+    data: Rc<RefCell<MjData<Rc<MjModel>>>>,
+    renderer: MjRenderer<Rc<MjModel>>,
+}
+
+impl Camera {
+    pub fn render_rgb(&mut self) -> ImageBuffer<Rgb<u8>, Vec<u8>> {
+        self.renderer.sync(&mut self.data.borrow_mut());
+        let raw = self.renderer.rgb_flat().expect("no camera detected");
+        ImageBuffer::from_raw(self.x, self.y, raw.to_vec())
+            .expect("This should not be possible since mujoco should always export something valid")
+    }
+
+    pub fn render_depth(&mut self) -> ImageBuffer<Luma<f32>, Vec<f32>> {
+        self.renderer.sync(&mut self.data.borrow_mut());
+        let raw = self.renderer.depth_flat().expect("no camera detected");
+        ImageBuffer::from_raw(self.x, self.y, raw.to_vec())
+            .expect("This should not be possible since mujoco should always export something valid")
     }
 }
