@@ -7,6 +7,13 @@ This is a library I'm developing in my free time for my own use. New features ar
 
 Keep in mind that this library is still a work in progress so there will likely be breaking changes with each version.
 
+## Install
+In order for the package to run properly, MuJoCo must be installed and the following env var must be set: 
+
+```bash
+export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/
+```
+
 ## Currently Supported:
 - Getting qpos and qvel from joints.
 - Controllering basic actuators.
