@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["basic_pub","evobridge", "evocam", "evocontrol", "evods", "evolog", "evosim", "evotypes-rs", "toby"]
+members = ["basic_pub","evobridge", "evocam", "evocontrol", "evods", "evolog", "evomujoco", "evosim", "evotypes-rs", "toby"]
 
 [profile.dev]
 opt-level = 1
