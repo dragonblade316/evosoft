@@ -14,7 +14,12 @@ In order for the package to run properly, MuJoCo must be installed and the follo
 export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/
 ```
 
-## Currently Supported:
+## Versioning
+0.x.y
+x: Fairly major change and likely not backward compatible.
+y: Backward compatible patch.
+
+## Currently Supported
 - Getting qpos and qvel from joints.
 - Controllering basic actuators.
 - Easy rendering of mujoco cameras.
