@@ -5,14 +5,12 @@ If you want a very simple and quick way to set up and interact with a mujoco sim
 
 This is a library I'm developing in my free time for my own use. New features are coming but they are limited by whatever freetime I have between my studies. If you want something implemented feel free to make an issue or pull request on the github.
 
-## Docs:
-I have not writen the documentation yet. It is on the way.
+Keep in mind that this library is still a work in progress so there will likely be breaking changes with each version.
 
 ## Currently Supported:
 - Getting qpos and qvel from joints.
 - Controllering basic actuators.
 - Easy rendering of mujoco cameras.
-- Collecting a list of joints.
 - Viewer powered by mujoco-rs.
 
 ## Planed
@@ -22,7 +20,6 @@ I have not writen the documentation yet. It is on the way.
 - Custom file loader to fix the shortcomings of mj_loadXML.
 
 ## Example
-This example is not very good since it only shows how to start the scene. I will work on a better one when I have time.
 ```rust
 //I borrowed this mujoco xml from the mujoco-rs readme. More advanced examples on the way.
 const EXAMPLE: &str = "

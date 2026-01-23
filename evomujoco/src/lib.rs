@@ -13,6 +13,7 @@ use mujoco_rs::{
 
 pub use mujoco_rs::prelude::MjModel;
 
+///The container that holds and runs the simulation
 pub struct Mujoco {
     model: Rc<MjModel>,
     data: Rc<RefCell<MjData<Rc<MjModel>>>>,
@@ -59,12 +60,20 @@ impl Mujoco {
     pub fn get_joint_name(&self, index: usize) -> String {
         self.model
             .id_to_name(mujoco_rs::mujoco_c::mjtObj::mjOBJ_JOINT, index as i32)
-            .expect("how")
+            .expect("name not found")
             .to_string()
     }
 
     ///Not implemented
-    pub fn get_index(&self, name: String) {}
+    pub fn get_index(&self, name: String) -> u32 {
+        self.model
+            .name_to_id(mujoco_rs::mujoco_c::mjtObj::mjOBJ_JOINT, &name) as u32
+    }
+
+    pub fn get_joint_from_name(&self, name: String) -> Joint {
+        let id = self.get_index(name);
+        self.get_joint(id as usize)
+    }
 
     ///Reterives a joint given a joint index.
     pub fn get_joint(&self, index: usize) -> Joint {
@@ -126,6 +135,7 @@ impl Mujoco {
 }
 
 //Represents a joint. You can create this using Mujoco::get_joint().
+#[derive(Debug)]
 pub enum Joint {
     Hinge {
         index: usize,
@@ -151,6 +161,7 @@ pub enum Joint {
 
 ///Simple enum containing the output of a call to get_qpos or get_qvel. The reason this is an enum
 ///is because the output of these functions are different based on the kind of joint.
+#[derive(Debug)]
 pub enum JointOutput {
     Scalar(f64),
     Ball {
