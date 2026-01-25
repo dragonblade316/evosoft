@@ -12,6 +12,7 @@ use mujoco_rs::{
 };
 
 pub use mujoco_rs::prelude::MjModel;
+use nalgebra::{Isometry3, Quaternion, Rotation2, Rotation3, Translation, Unit, UnitQuaternion};
 
 ///The container that holds and runs the simulation
 pub struct Mujoco {
@@ -119,8 +120,12 @@ impl Mujoco {
             x,
             y,
             data: self.data.clone(),
-            renderer: MjRenderer::new(self.model.clone(), x as usize, y as usize, 256)
-                .expect("Prob willwork"),
+            renderer: MjRenderer::builder()
+                .width(x)
+                .height(y)
+                .depth(true)
+                .build(self.model.clone())
+                .expect("stuff"),
         }
     }
 
@@ -163,20 +168,10 @@ pub enum Joint {
 ///is because the output of these functions are different based on the kind of joint.
 #[derive(Debug)]
 pub enum JointOutput {
-    Scalar(f64),
-    Ball {
-        rx: f64,
-        ry: f64,
-        rz: f64,
-    },
-    Free {
-        x: f64,
-        y: f64,
-        z: f64,
-        rx: f64,
-        ry: f64,
-        rz: f64,
-    },
+    Slide(f64),
+    Hinge(Rotation2<f64>),
+    Ball(UnitQuaternion<f64>),
+    Free(Isometry3<f64>),
 }
 
 impl Joint {
@@ -198,7 +193,7 @@ impl Joint {
                     .view(&data)
                     .qpos;
 
-                JointOutput::Scalar(pos.to_vec().get(0).unwrap().clone())
+                JointOutput::Slide(pos.to_vec().get(0).unwrap().clone())
             }
             Self::Hinge {
                 index,
@@ -215,7 +210,9 @@ impl Joint {
                     .view(&data)
                     .qpos;
 
-                JointOutput::Scalar(pos.to_vec().get(0).unwrap().clone())
+                // JointOutput::Scalar(pos.to_vec().get(0).unwrap().clone())
+                //
+                JointOutput::Hinge(Rotation2::new(*pos.get(0).unwrap()))
             }
             Self::Ball {
                 index,
@@ -234,11 +231,10 @@ impl Joint {
 
                 let pose = pos.to_vec();
 
-                JointOutput::Ball {
-                    rx: pose.get(0).unwrap().clone(),
-                    ry: pose.get(0).unwrap().clone(),
-                    rz: pose.get(0).unwrap().clone(),
-                }
+                let rotation = Quaternion::new(pose[0], pose[1], pose[2], pose[3]);
+                let unitquan = UnitQuaternion::from_quaternion(rotation);
+
+                JointOutput::Ball(unitquan)
             }
             Self::Free {
                 index,
@@ -257,14 +253,13 @@ impl Joint {
 
                 let pose = pos.to_vec();
 
-                JointOutput::Free {
-                    x: pose.get(0).unwrap().clone(),
-                    y: pose.get(1).unwrap().clone(),
-                    z: pose.get(2).unwrap().clone(),
-                    rx: pose.get(3).unwrap().clone(),
-                    ry: pose.get(4).unwrap().clone(),
-                    rz: pose.get(5).unwrap().clone(),
-                }
+                let translation = Translation::<f64, 3>::new(pose[0], pose[1], pose[2]);
+                let rotation = Quaternion::new(pos[3], pos[4], pos[5], pos[6]);
+                let unitquan = UnitQuaternion::from_quaternion(rotation);
+
+                let transform = Isometry3::from_parts(translation, unitquan);
+
+                JointOutput::Free(transform)
             }
         }
     }
@@ -287,7 +282,7 @@ impl Joint {
                     .view(&data)
                     .qvel;
 
-                JointOutput::Scalar(vel.to_vec().get(0).unwrap().clone())
+                JointOutput::Slide(vel.to_vec().get(0).unwrap().clone())
             }
             Self::Hinge {
                 index,
@@ -304,7 +299,7 @@ impl Joint {
                     .view(&data)
                     .qvel;
 
-                JointOutput::Scalar(vel.to_vec().get(0).unwrap().clone())
+                JointOutput::Hinge(Rotation2::new(*vel.to_vec().get(0).unwrap()))
             }
             Self::Ball {
                 index,
@@ -323,11 +318,9 @@ impl Joint {
 
                 let velocity = vel.to_vec();
 
-                JointOutput::Ball {
-                    rx: velocity.get(0).unwrap().clone(),
-                    ry: velocity.get(1).unwrap().clone(),
-                    rz: velocity.get(2).unwrap().clone(),
-                }
+                let rotation = Quaternion::new(velocity[0], velocity[1], velocity[2], velocity[3]);
+                let unitquan = UnitQuaternion::from_quaternion(rotation);
+                JointOutput::Ball(unitquan)
             }
             Self::Free {
                 index,
@@ -346,14 +339,13 @@ impl Joint {
 
                 let velocity = vel.to_vec();
 
-                JointOutput::Free {
-                    x: velocity.get(0).unwrap().clone(),
-                    y: velocity.get(1).unwrap().clone(),
-                    z: velocity.get(2).unwrap().clone(),
-                    rx: velocity.get(3).unwrap().clone(),
-                    ry: velocity.get(4).unwrap().clone(),
-                    rz: velocity.get(5).unwrap().clone(),
-                }
+                let translation = Translation::<f64, 3>::new(velocity[0], velocity[1], velocity[2]);
+                let rotation = Quaternion::new(velocity[3], velocity[4], velocity[5], velocity[6]);
+                let unitquan = UnitQuaternion::from_quaternion(rotation);
+
+                let transform = Isometry3::from_parts(translation, unitquan);
+
+                JointOutput::Free(transform)
             }
         }
     }

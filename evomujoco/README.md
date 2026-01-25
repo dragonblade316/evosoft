@@ -24,11 +24,11 @@ y: Backward compatible patch.
 - Controllering basic actuators.
 - Easy rendering of mujoco cameras.
 - Viewer powered by mujoco-rs.
+- Using nalgebra types to repersent transforms.
 
 ## Planed
 - Supporting other sensors (I currently plan on implementing the IMU but if you need another sensor implemented, make an issue on the github).
 - Getting xpos and xvel from joints (I just have not needed this yet)
-- Maybe switching to nalgebra types to repersent transforms.
 - Custom file loader to fix the shortcomings of mj_loadXML.
 
 ## Example

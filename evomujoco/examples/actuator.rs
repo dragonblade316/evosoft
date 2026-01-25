@@ -44,7 +44,10 @@ fn main() {
                 .unwrap()
                 .as_secs_f64(),
         ));
-        println!("{:?}", joint.get_qpos());
+        match joint.get_qpos() {
+            evomujoco::JointOutput::Hinge(j) => println!("{}", j.angle()),
+            _ => {}
+        }
         mujoco.update();
     }
 }
