@@ -1,4 +1,4 @@
-//I borrowed this mujoco xml from the mujoco-rs readme. More advanced examples on the way.
+//I borrowed this mujoco xml from the mujoco-rs readme.
 const EXAMPLE: &str = "
 <mujoco>
   <worldbody>
