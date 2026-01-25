@@ -123,6 +123,7 @@ impl Mujoco {
             renderer: MjRenderer::builder()
                 .width(x)
                 .height(y)
+                .depth(true)
                 .build(self.model.clone())
                 .expect("stuff"),
         }
